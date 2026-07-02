@@ -46,6 +46,7 @@ export default function Home() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editTags, setEditTags] = useState("");
+  const [editClearCooked, setEditClearCooked] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -137,12 +138,14 @@ export default function Home() {
     setEditingId(r.id);
     setEditName(r.name);
     setEditTags(r.tags.join(", "));
+    setEditClearCooked(false);
   }
 
   function cancelEdit() {
     setEditingId(null);
     setEditName("");
     setEditTags("");
+    setEditClearCooked(false);
   }
 
   async function saveEdit(id: string) {
@@ -152,9 +155,13 @@ export default function Home() {
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
+    const updatePayload: Partial<Recipe> = { name: editName.trim(), tags };
+    if (editClearCooked) {
+      updatePayload.last_cooked = null;
+    }
     const { data, error } = await supabase
       .from("recipes")
-      .update({ name: editName.trim(), tags })
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .single();
@@ -413,6 +420,20 @@ export default function Home() {
                       placeholder="Tags, mit Komma getrennt"
                       className="w-full rounded-card border border-sage-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
                     />
+                    <label className="flex items-center gap-2 text-xs text-ink/70 pt-1 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={editClearCooked}
+                        onChange={(e) => setEditClearCooked(e.target.checked)}
+                        className="accent-sage-700"
+                      />
+                      Kochdatum löschen (als „noch nie gekocht" markieren)
+                      {!editClearCooked && (
+                        <span className="text-ink/40">
+                          — aktuell: {formatLastCooked(r.last_cooked)}
+                        </span>
+                      )}
+                    </label>
                     <div className="flex gap-2 pt-1">
                       <button
                         onClick={() => saveEdit(r.id)}
