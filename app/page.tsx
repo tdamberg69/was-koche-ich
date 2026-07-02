@@ -11,6 +11,7 @@ import {
   Clock,
   Flame,
   Tag as TagIcon,
+  Pencil,
 } from "lucide-react";
 
 function daysSince(dateStr: string | null): number {
@@ -42,6 +43,13 @@ export default function Home() {
   const [newTags, setNewTags] = useState("");
   const [adding, setAdding] = useState(false);
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editTags, setEditTags] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   async function fetchRecipes() {
     setLoading(true);
     const { data, error } = await supabase
@@ -69,7 +77,10 @@ export default function Home() {
 
   const filtered = useMemo(() => {
     return recipes.filter((r) => {
-      if (includeTags.size > 0 && !r.tags.some((t) => includeTags.has(t)))
+      if (
+        includeTags.size > 0 &&
+        !Array.from(includeTags).every((t) => r.tags.includes(t))
+      )
         return false;
       if (excludeTags.size > 0 && r.tags.some((t) => excludeTags.has(t)))
         return false;
@@ -117,8 +128,47 @@ export default function Home() {
   }
 
   async function deleteRecipe(id: string) {
+    setConfirmDeleteId(null);
     setRecipes((prev) => prev.filter((r) => r.id !== id));
     await supabase.from("recipes").delete().eq("id", id);
+  }
+
+  function startEdit(r: Recipe) {
+    setEditingId(r.id);
+    setEditName(r.name);
+    setEditTags(r.tags.join(", "));
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditName("");
+    setEditTags("");
+  }
+
+  async function saveEdit(id: string) {
+    if (!editName.trim()) return;
+    setSaving(true);
+    const tags = editTags
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    const { data, error } = await supabase
+      .from("recipes")
+      .update({ name: editName.trim(), tags })
+      .eq("id", id)
+      .select()
+      .single();
+    if (!error && data) {
+      setRecipes((prev) =>
+        prev
+          .map((r) => (r.id === id ? data : r))
+          .sort((a, b) => a.name.localeCompare(b.name))
+      );
+      cancelEdit();
+    } else if (error) {
+      setError(error.message);
+    }
+    setSaving(false);
   }
 
   async function addRecipe(e: React.FormEvent) {
@@ -204,7 +254,8 @@ export default function Home() {
               <TagIcon size={17} /> Tags filtern
             </h2>
             <p className="text-xs text-ink/50 mb-3">
-              Klick = einschließen · nochmal Klick = ausschließen
+              Klick = einschließen (alle gewählten müssen passen) · nochmal
+              Klick = ausschließen
             </p>
             <div className="flex flex-wrap gap-1.5">
               {allTags.length === 0 && (
@@ -344,45 +395,108 @@ export default function Home() {
             </div>
           ) : (
             <ul className="space-y-2">
-              {ranked.map((r) => (
-                <li
-                  key={r.id}
-                  className="recipe-card flex items-center justify-between bg-white border border-sage-100 rounded-card px-4 py-3"
-                >
-                  <div>
-                    <p className="font-medium">{r.name}</p>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {r.tags.map((t) => (
-                        <span
-                          key={t}
-                          className="font-mono text-[10px] px-1.5 py-0.5 bg-sage-100 text-sage-700 rounded-full"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                      <span className="font-mono text-[10px] px-1.5 py-0.5 text-ink/40">
-                        {formatLastCooked(r.last_cooked)}
-                      </span>
+              {ranked.map((r) =>
+                editingId === r.id ? (
+                  <li
+                    key={r.id}
+                    className="bg-white border-2 border-sage-500 rounded-card px-4 py-3 space-y-2"
+                  >
+                    <input
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      placeholder="Name"
+                      className="w-full rounded-card border border-sage-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+                    />
+                    <input
+                      value={editTags}
+                      onChange={(e) => setEditTags(e.target.value)}
+                      placeholder="Tags, mit Komma getrennt"
+                      className="w-full rounded-card border border-sage-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-sage-500"
+                    />
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => saveEdit(r.id)}
+                        disabled={saving || !editName.trim()}
+                        className="rounded-card bg-sage-700 text-white text-xs font-medium px-3 py-1.5 hover:bg-sage-900 disabled:opacity-40"
+                      >
+                        {saving ? "Speichern…" : "Speichern"}
+                      </button>
+                      <button
+                        onClick={cancelEdit}
+                        className="rounded-card border border-sage-300 text-xs font-medium px-3 py-1.5 hover:bg-sage-100"
+                      >
+                        Abbrechen
+                      </button>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      onClick={() => markCookedToday(r.id)}
-                      title="Heute gekocht"
-                      className="p-2 rounded-full hover:bg-sage-100 text-sage-700"
-                    >
-                      <Check size={16} />
-                    </button>
-                    <button
-                      onClick={() => deleteRecipe(r.id)}
-                      title="Löschen"
-                      className="p-2 rounded-full hover:bg-rust/10 text-rust"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                ) : (
+                  <li
+                    key={r.id}
+                    className="recipe-card flex items-center justify-between bg-white border border-sage-100 rounded-card px-4 py-3"
+                  >
+                    <div>
+                      <p className="font-medium">{r.name}</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {r.tags.map((t) => (
+                          <span
+                            key={t}
+                            className="font-mono text-[10px] px-1.5 py-0.5 bg-sage-100 text-sage-700 rounded-full"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                        <span className="font-mono text-[10px] px-1.5 py-0.5 text-ink/40">
+                          {formatLastCooked(r.last_cooked)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {confirmDeleteId === r.id ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-xs text-rust font-medium mr-1">
+                          Wirklich löschen?
+                        </span>
+                        <button
+                          onClick={() => deleteRecipe(r.id)}
+                          className="rounded-card bg-rust text-white text-xs font-medium px-2.5 py-1 hover:bg-rust/80"
+                        >
+                          Löschen
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="rounded-card border border-sage-300 text-xs font-medium px-2.5 py-1 hover:bg-sage-100"
+                        >
+                          Abbrechen
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => markCookedToday(r.id)}
+                          title="Heute gekocht"
+                          className="p-2 rounded-full hover:bg-sage-100 text-sage-700"
+                        >
+                          <Check size={16} />
+                        </button>
+                        <button
+                          onClick={() => startEdit(r)}
+                          title="Bearbeiten"
+                          className="p-2 rounded-full hover:bg-sage-100 text-ink/60"
+                        >
+                          <Pencil size={16} />
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(r.id)}
+                          title="Löschen"
+                          className="p-2 rounded-full hover:bg-rust/10 text-rust"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                )
+              )}
             </ul>
           )}
         </section>
