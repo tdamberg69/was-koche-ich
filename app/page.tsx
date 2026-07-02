@@ -50,6 +50,7 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmCookedId, setConfirmCookedId] = useState<string | null>(null);
 
   async function fetchRecipes() {
     setLoading(true);
@@ -121,6 +122,7 @@ export default function Home() {
   }
 
   async function markCookedToday(id: string) {
+    setConfirmCookedId(null);
     const today = new Date().toISOString().slice(0, 10);
     setRecipes((prev) =>
       prev.map((r) => (r.id === id ? { ...r, last_cooked: today } : r))
@@ -362,12 +364,32 @@ export default function Home() {
                     </span>
                   ))}
                 </div>
-                <button
-                  onClick={() => markCookedToday(ranked[0].id)}
-                  className="rounded-card bg-ink text-paper text-sm font-medium px-4 py-2 hover:bg-sage-900 transition-colors"
-                >
-                  Heute gekocht ✓
-                </button>
+                {confirmCookedId === ranked[0].id ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-ink/70 font-medium">
+                      Wirklich als heute gekocht markieren?
+                    </span>
+                    <button
+                      onClick={() => markCookedToday(ranked[0].id)}
+                      className="rounded-card bg-ink text-paper text-sm font-medium px-4 py-2 hover:bg-sage-900"
+                    >
+                      Ja, gekocht
+                    </button>
+                    <button
+                      onClick={() => setConfirmCookedId(null)}
+                      className="rounded-card border border-sage-300 text-sm font-medium px-4 py-2 hover:bg-sage-100"
+                    >
+                      Abbrechen
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmCookedId(ranked[0].id)}
+                    className="rounded-card bg-ink text-paper text-sm font-medium px-4 py-2 hover:bg-sage-900 transition-colors"
+                  >
+                    Heute gekocht ✓
+                  </button>
+                )}
               </div>
 
               {/* Rest ranked list */}
@@ -388,12 +410,29 @@ export default function Home() {
                             {formatLastCooked(r.last_cooked)}
                           </span>
                         </div>
-                        <button
-                          onClick={() => markCookedToday(r.id)}
-                          className="text-xs font-mono text-sage-700 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 border border-sage-300 rounded-full hover:bg-sage-100"
-                        >
-                          gekocht ✓
-                        </button>
+                        {confirmCookedId === r.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => markCookedToday(r.id)}
+                              className="text-xs font-mono text-white bg-sage-700 px-2 py-1 rounded-full hover:bg-sage-900"
+                            >
+                              Ja, gekocht
+                            </button>
+                            <button
+                              onClick={() => setConfirmCookedId(null)}
+                              className="text-xs font-mono text-ink/60 px-2 py-1 border border-sage-300 rounded-full hover:bg-sage-100"
+                            >
+                              Abbrechen
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmCookedId(r.id)}
+                            className="text-xs font-mono text-sage-700 opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 border border-sage-300 rounded-full hover:bg-sage-100"
+                          >
+                            gekocht ✓
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -490,10 +529,28 @@ export default function Home() {
                           Abbrechen
                         </button>
                       </div>
+                    ) : confirmCookedId === r.id ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-xs text-sage-700 font-medium mr-1">
+                          Heute gekocht?
+                        </span>
+                        <button
+                          onClick={() => markCookedToday(r.id)}
+                          className="rounded-card bg-sage-700 text-white text-xs font-medium px-2.5 py-1 hover:bg-sage-900"
+                        >
+                          Ja
+                        </button>
+                        <button
+                          onClick={() => setConfirmCookedId(null)}
+                          className="rounded-card border border-sage-300 text-xs font-medium px-2.5 py-1 hover:bg-sage-100"
+                        >
+                          Abbrechen
+                        </button>
+                      </div>
                     ) : (
                       <div className="flex items-center gap-1 shrink-0">
                         <button
-                          onClick={() => markCookedToday(r.id)}
+                          onClick={() => setConfirmCookedId(r.id)}
                           title="Heute gekocht"
                           className="p-2 rounded-full hover:bg-sage-100 text-sage-700"
                         >
