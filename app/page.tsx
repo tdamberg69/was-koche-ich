@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase, type Recipe } from "@/lib/supabase";
+import type { Recipe } from "@/lib/db";
 import {
   ChefHat,
   Plus,
@@ -29,6 +29,18 @@ function formatLastCooked(dateStr: string | null): string {
   return `vor ${d} Tagen`;
 }
 
+async function apiFetch(url: string, options?: RequestInit) {
+  const res = await fetch(url, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...options?.headers },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Anfrage fehlgeschlagen (${res.status})`);
+  }
+  return res.json();
+}
+
 export default function Home() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,15 +66,12 @@ export default function Home() {
 
   async function fetchRecipes() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("recipes")
-      .select("*")
-      .order("name", { ascending: true });
-    if (error) {
-      setError(error.message);
-    } else {
+    try {
+      const data = await apiFetch("/api/recipes");
       setRecipes(data ?? []);
       setError(null);
+    } catch (err: any) {
+      setError(err.message);
     }
     setLoading(false);
   }
@@ -127,13 +136,26 @@ export default function Home() {
     setRecipes((prev) =>
       prev.map((r) => (r.id === id ? { ...r, last_cooked: today } : r))
     );
-    await supabase.from("recipes").update({ last_cooked: today }).eq("id", id);
+    try {
+      await apiFetch(`/api/recipes/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ last_cooked: today }),
+      });
+    } catch (err: any) {
+      setError(err.message);
+      fetchRecipes();
+    }
   }
 
   async function deleteRecipe(id: string) {
     setConfirmDeleteId(null);
     setRecipes((prev) => prev.filter((r) => r.id !== id));
-    await supabase.from("recipes").delete().eq("id", id);
+    try {
+      await apiFetch(`/api/recipes/${id}`, { method: "DELETE" });
+    } catch (err: any) {
+      setError(err.message);
+      fetchRecipes();
+    }
   }
 
   function startEdit(r: Recipe) {
@@ -157,25 +179,26 @@ export default function Home() {
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
-    const updatePayload: Partial<Recipe> = { name: editName.trim(), tags };
+    const payload: { name: string; tags: string[]; last_cooked?: string | null } = {
+      name: editName.trim(),
+      tags,
+    };
     if (editClearCooked) {
-      updatePayload.last_cooked = null;
+      payload.last_cooked = null;
     }
-    const { data, error } = await supabase
-      .from("recipes")
-      .update(updatePayload)
-      .eq("id", id)
-      .select()
-      .single();
-    if (!error && data) {
+    try {
+      const data = await apiFetch(`/api/recipes/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
       setRecipes((prev) =>
         prev
           .map((r) => (r.id === id ? data : r))
           .sort((a, b) => a.name.localeCompare(b.name))
       );
       cancelEdit();
-    } else if (error) {
-      setError(error.message);
+    } catch (err: any) {
+      setError(err.message);
     }
     setSaving(false);
   }
@@ -188,17 +211,18 @@ export default function Home() {
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean);
-    const { data, error } = await supabase
-      .from("recipes")
-      .insert({ name: newName.trim(), tags, last_cooked: null })
-      .select()
-      .single();
-    if (!error && data) {
-      setRecipes((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+    try {
+      const data = await apiFetch("/api/recipes", {
+        method: "POST",
+        body: JSON.stringify({ name: newName.trim(), tags }),
+      });
+      setRecipes((prev) =>
+        [...prev, data].sort((a, b) => a.name.localeCompare(b.name))
+      );
       setNewName("");
       setNewTags("");
-    } else if (error) {
-      setError(error.message);
+    } catch (err: any) {
+      setError(err.message);
     }
     setAdding(false);
   }
@@ -222,7 +246,7 @@ export default function Home() {
 
       {error && (
         <div className="mb-6 rounded-card border border-rust/30 bg-rust/10 px-4 py-3 text-sm text-rust">
-          Fehler: {error}. Prüfe, ob die Supabase-Umgebungsvariablen gesetzt sind.
+          Fehler: {error}. Prüfe, ob DATABASE_URL bei Vercel gesetzt ist.
         </div>
       )}
 
@@ -364,6 +388,7 @@ export default function Home() {
                     </span>
                   ))}
                 </div>
+
                 {confirmCookedId === ranked[0].id ? (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-ink/70 font-medium">
